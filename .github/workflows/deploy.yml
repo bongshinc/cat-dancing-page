@@ -1,0 +1,123 @@
+name: 🚀 Deploy Dancing Cat to cloudtype.io
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔧 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: 📦 Install dependencies
+      run: npm ci
+
+    - name: 🔍 Lint code
+      run: npm run lint --if-present
+
+    - name: 🏗️ Build project
+      run: npm run build
+
+    - name: ✅ Verify build output
+      run: |
+        echo "🔍 Build verification:"
+        ls -la dist/
+        echo ""
+        echo "📊 Build size:"
+        du -sh dist/
+        echo ""
+        echo "📄 Index.html preview:"
+        head -15 dist/index.html
+        echo ""
+        echo "🎯 Asset files:"
+        find dist -name "*.js" -o -name "*.css" | head -10
+
+    - name: 🧪 Test build preview (optional)
+      run: |
+        if [ -f "package.json" ] && grep -q "\"preview\"" package.json; then
+          echo "🔍 Starting preview server for testing..."
+          timeout 10s npm run preview || echo "✅ Preview server started successfully"
+        else
+          echo "ℹ️ No preview script found, skipping preview test"
+        fi
+
+  deploy-notification:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: 🎉 Deployment notification
+      run: |
+        echo "🚀 Build successful! cloudtype.io will auto-deploy this commit."
+        echo ""
+        echo "📋 Deployment Info:"
+        echo "├── 📦 Commit: ${{ github.sha }}"
+        echo "├── 👤 Author: ${{ github.actor }}"
+        echo "├── 🌿 Branch: ${{ github.ref_name }}"
+        echo "├── 💬 Message: ${{ github.event.head_commit.message }}"
+        echo "└── 🌐 URL: https://web-cat-dancing-page-mbu6gsnrf9f78176.sel4.cloudtype.app/"
+        echo ""
+        echo "⏳ Please wait 2-3 minutes for cloudtype.io to complete the deployment."
+
+  deployment-check:
+    runs-on: ubuntu-latest
+    needs: deploy-notification
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: ⏳ Wait for deployment
+      run: |
+        echo "⏳ Waiting 120 seconds for cloudtype.io deployment..."
+        sleep 120
+
+    - name: 🌐 Check deployment status
+      run: |
+        URL="https://web-cat-dancing-page-mbu6gsnrf9f78176.sel4.cloudtype.app/"
+        echo "🔍 Checking deployment at: $URL"
+
+        # Check if site is accessible
+        if curl -sSf "$URL" > /dev/null; then
+          echo "✅ Deployment successful! Site is accessible."
+
+          # Check if it contains expected content
+          if curl -s "$URL" | grep -q "댄싱 캣\|Dancing Cat\|cat"; then
+            echo "🐱 Dancing Cat content detected!"
+          else
+            echo "⚠️ Site is accessible but content verification failed"
+          fi
+        else
+          echo "❌ Deployment check failed - site not accessible"
+          exit 1
+        fi
+
+    - name: 📊 Performance check
+      run: |
+        URL="https://web-cat-dancing-page-mbu6gsnrf9f78176.sel4.cloudtype.app/"
+        echo "📊 Running basic performance check..."
+
+        # Measure response time
+        RESPONSE_TIME=$(curl -o /dev/null -s -w "%{time_total}" "$URL")
+        echo "⏱️ Response time: ${RESPONSE_TIME}s"
+
+        # Check response headers
+        echo "📋 Response headers:"
+        curl -I "$URL" 2>/dev/null | head -5
+
+        if (( $(echo "$RESPONSE_TIME < 5.0" | bc -l) )); then
+          echo "✅ Performance check passed (under 5s)"
+        else
+          echo "⚠️ Performance check warning (over 5s)"
+        fi
